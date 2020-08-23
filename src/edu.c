@@ -10,37 +10,38 @@
 
 #define EDU_LOG_PREFIX "edu: "
 #define log(level, format, ...) printk(level EDU_LOG_PREFIX format "\n", ##__VA_ARGS__)
-#define log_info(format, ...)   log(KERN_INFO, format, ##__VA_ARGS__)
-#define log_error(format, ...)  log(KERN_ERR, format, ##__VA_ARGS__)
+#define log_info(format, ...) log(KERN_INFO, format, ##__VA_ARGS__)
+#define log_error(format, ...) log(KERN_ERR, format, ##__VA_ARGS__)
 
-#define EDU_IDENT       0x00
- #define EDU_IDENT_MASK_MAJOR  0xff000000
- #define EDU_IDENT_MASK_MINOR  0x00ff0000
- #define EDU_IDENT_SHIFT_MAJOR 24
- #define EDU_IDENT_SHIFT_MINOR 16
- #define EDU_IDENT_MASK_MAGIC  0x000000ff
- #define EDU_IDENT_MAGIC       0xed
+#define EDU_IDENT 0x00
+#define EDU_IDENT_MASK_MAJOR 0xff000000
+#define EDU_IDENT_MASK_MINOR 0x00ff0000
+#define EDU_IDENT_SHIFT_MAJOR 24
+#define EDU_IDENT_SHIFT_MINOR 16
+#define EDU_IDENT_MASK_MAGIC 0x000000ff
+#define EDU_IDENT_MAGIC 0xed
 
-#define EDU_XOR         0x04
-#define EDU_FACTORIAL   0x08
-#define EDU_STATUS      0x20
- #define EDU_STATUS_COPMUTING  0x01
- #define EDU_STATUS_RAISE_INTR 0x80
+#define EDU_XOR 0x04
+#define EDU_FACTORIAL 0x08
+#define EDU_STATUS 0x20
+#define EDU_STATUS_COPMUTING 0x01
+#define EDU_STATUS_RAISE_INTR 0x80
 
 #define EDU_INTR_STATUS 0x24
-#define EDU_INTR_RAISE  0x60
-#define EDU_INTR_ACK    0x64
+#define EDU_INTR_RAISE 0x60
+#define EDU_INTR_ACK 0x64
 
-#define EDU_DMA_SRC     0x80
-#define EDU_DMA_DEST    0x88
-#define EDU_DMA_CNT     0x90
-#define EDU_DMA_CMD     0x98
- #define EDU_DMA_CMD_START      0x01
- #define EDU_DMA_CMD_DIR_TO_EDU 0x00
- #define EDU_DMA_CMD_DIR_TO_RAM 0x02
- #define EDU_DMA_CMD_RAISE_INTR 0x04
+#define EDU_DMA_SRC 0x80
+#define EDU_DMA_DEST 0x88
+#define EDU_DMA_CNT 0x90
+#define EDU_DMA_CMD 0x98
+#define EDU_DMA_CMD_START 0x01
+#define EDU_DMA_CMD_DIR_TO_EDU 0x00
+#define EDU_DMA_CMD_DIR_TO_RAM 0x02
+#define EDU_DMA_CMD_RAISE_INTR 0x04
 
-struct edu_device {
+struct edu_device
+{
     struct pci_dev *pdev;
     void __iomem *map;
 
@@ -51,7 +52,7 @@ struct edu_device {
 };
 
 static struct class *edu_class;
-static atomic_t n_devices = ATOMIC_INIT(0);  /* total amount of devices created */
+static atomic_t n_devices = ATOMIC_INIT(0); /* total amount of devices created */
 
 static long edu_do_xor(struct edu_device *edu, unsigned long arg)
 {
@@ -72,7 +73,24 @@ static long edu_do_xor(struct edu_device *edu, unsigned long arg)
 
 static long edu_do_factorial(struct edu_device *edu, unsigned long arg)
 {
-    return -ENXIO;
+    struct edu_factorial_cmd __user *cmd = (void __user *)(arg);
+    u32 val_in, val_out;
+    int i, skip = 1000;
+
+    if (get_user(val_in, &cmd->val_in))
+        return -EINVAL;
+
+    iowrite32(val_in, edu->map + EDU_FACTORIAL);
+
+    while (ioread32(edu->map + EDU_STATUS))
+        for (i = 0; i < skip; i++);
+
+    val_out = ioread32(edu->map + EDU_FACTORIAL);
+
+    if (put_user(val_out, &cmd->val_out))
+        return -EINVAL;
+
+    return 0;
 }
 
 static long edu_do_intr(struct edu_device *edu, unsigned long arg)
@@ -82,7 +100,7 @@ static long edu_do_intr(struct edu_device *edu, unsigned long arg)
 
     if (get_user(val_in, &cmd->val_in))
         return -EINVAL;
-    
+
     iowrite32(val_in, edu->map + EDU_INTR_RAISE);
 
     return 0;
@@ -94,17 +112,17 @@ static long edu_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
     switch (cmd)
     {
-        case EDU_IOCTL_XOR:
-            return edu_do_xor(edu, arg);
+    case EDU_IOCTL_XOR:
+        return edu_do_xor(edu, arg);
 
-        case EDU_IOCTL_FACTORIAL:
-            return edu_do_factorial(edu, arg);
+    case EDU_IOCTL_FACTORIAL:
+        return edu_do_factorial(edu, arg);
 
-        case EDU_IOCTL_INTR:
-            return edu_do_intr(edu, arg);
+    case EDU_IOCTL_INTR:
+        return edu_do_intr(edu, arg);
 
-        default:
-            return -EINVAL;
+    default:
+        return -EINVAL;
     }
 }
 
@@ -115,7 +133,8 @@ static int edu_open(struct inode *inode, struct file *file)
 
     mutex_lock(&edu->lock);
 
-    if (edu->open_count) {
+    if (edu->open_count)
+    {
         mutex_unlock(&edu->lock);
         return -EBUSY;
     }
@@ -163,13 +182,15 @@ static int edu_create_chardev(struct edu_device *edu)
     edu->cdev.owner = THIS_MODULE;
 
     rc = cdev_add(&edu->cdev, devt, 1);
-    if (rc) {
+    if (rc)
+    {
         log_error("%s: failed to add a cdev (rc = %d)", pci_name(edu->pdev), rc);
         return rc;
     }
 
     dev = device_create(edu_class, &edu->pdev->dev, devt, NULL, "edu%u", n);
-    if (IS_ERR(dev)) {
+    if (IS_ERR(dev))
+    {
         rc = PTR_ERR(dev);
         log_error("%s: failed to create a device (rc = %d)", pci_name(edu->pdev),
                   rc);
@@ -218,12 +239,14 @@ static int edu_check_version(struct pci_dev *dev, void __iomem *map)
     minor = (ident & EDU_IDENT_MASK_MINOR) >> EDU_IDENT_SHIFT_MINOR;
     magic = (ident & EDU_IDENT_MASK_MAGIC);
 
-    if (magic != EDU_IDENT_MAGIC) {
+    if (magic != EDU_IDENT_MAGIC)
+    {
         log_error("%s: magic (0x%x) is wrong, aborting", pci_name(dev), magic);
         return -ENODEV;
     }
 
-    if (major != 1) {
+    if (major != 1)
+    {
         log_error("%s: only major version 1 is supported (%d), aborting",
                   pci_name(dev), major);
         return -ENODEV;
@@ -253,13 +276,15 @@ static int edu_probe(struct pci_dev *dev, const struct pci_device_id *id)
     pci_set_master(dev);
 
     rc = pci_request_region(dev, 0, "edu-bar0");
-    if (rc) {
+    if (rc)
+    {
         log_error("%s: failed to request BAR0 (rc = %d)", pci_name(dev), rc);
         goto err_disable_device;
     }
 
     edu->map = pci_iomap(dev, 0, 0);
-    if (!edu->map) {
+    if (!edu->map)
+    {
         log_error("%s: failed to map BAR0", pci_name(dev));
         rc = -ENODEV;
         goto err_free_region;
@@ -273,8 +298,9 @@ static int edu_probe(struct pci_dev *dev, const struct pci_device_id *id)
     rc = pci_alloc_irq_vectors(dev, 1, 1, PCI_IRQ_LEGACY);
 #else
     rc = pci_alloc_irq_vectors(dev, 1, 1, PCI_IRQ_MSI);
-#endif 
-    if (rc < 0) {
+#endif
+    if (rc < 0)
+    {
         log_error("%s: failed to allocate IRQ (rc = %d)", pci_name(dev), rc);
         goto err_free_region;
     }
@@ -285,7 +311,8 @@ static int edu_probe(struct pci_dev *dev, const struct pci_device_id *id)
 #else
     rc = request_irq(pci_irq_vector(dev, 0), edu_irq, 0, "edu-irq", dev);
 #endif
-    if (rc) {
+    if (rc)
+    {
         log_error("%s: failed to request IRQ (rc = %d)", pci_name(dev), rc);
         goto err_free_vectors;
     }
@@ -324,9 +351,8 @@ static void edu_remove(struct pci_dev *dev)
 }
 
 static struct pci_device_id edu_id_table[] = {
-    { PCI_DEVICE(0x1234, 0x11e8) },
-    { 0 }
-};
+    {PCI_DEVICE(0x1234, 0x11e8)},
+    {0}};
 
 static struct pci_driver edu_driver = {
     .name = "edu",
@@ -340,13 +366,15 @@ static int __init edu_init(void)
     int rc;
 
     edu_class = class_create(THIS_MODULE, "edu");
-    if (IS_ERR(edu_class)) {
+    if (IS_ERR(edu_class))
+    {
         log_error("failed to create 'edu' class");
         return PTR_ERR(edu_class);
     }
 
     rc = pci_register_driver(&edu_driver);
-    if (rc) {
+    if (rc)
+    {
         log_error("failed to register PCI device (rc = %d)", rc);
         goto err_class_destroy;
     }
@@ -368,7 +396,7 @@ static void __exit edu_exit(void)
 module_init(edu_init);
 module_exit(edu_exit);
 
-MODULE_AUTHOR("Ilya Repko <Ilya.Repko@oktetlabs.ru>");
+MODULE_AUTHOR("Ilya Shpilkov <ilya.shpilkov@mail.ru>");
 MODULE_DESCRIPTION("QEMU's 'edu' device driver");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("1");
