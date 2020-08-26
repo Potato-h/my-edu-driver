@@ -1,6 +1,6 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
-
+#include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -39,6 +39,7 @@ int main(int argc, char *argv[])
     // printf("check dmesg fot 'got interrupted' message...\n");
 
     cmd_fact.val_in = 5;
+    cmd_fact.val_out = 0;
     rc = ioctl(fd, EDU_IOCTL_FACTORIAL, &cmd_fact);
     if (rc)
     {

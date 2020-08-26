@@ -1,3 +1,6 @@
+#define _XOPEN_SOURCE   600
+#define _POSIX_C_SOURCE 200112L
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -49,6 +52,8 @@ struct edu_device
     struct mutex lock;
     unsigned open_count;
     struct device *dev;
+
+    unsigned int fact_computing : 1;
 };
 
 static struct class *edu_class;
@@ -74,17 +79,22 @@ static long edu_do_xor(struct edu_device *edu, unsigned long arg)
 static long edu_do_factorial(struct edu_device *edu, unsigned long arg)
 {
     struct edu_factorial_cmd __user *cmd = (void __user *)(arg);
-    u32 val_in, val_out;
-    int i, skip = 1000;
-
+    u32 val_in, val_out, i, skip = (u32)(1e9);
+    edu->fact_computing = 1;
+    
     if (get_user(val_in, &cmd->val_in))
         return -EINVAL;
 
+    iowrite32(EDU_STATUS_RAISE_INTR, edu->map + EDU_STATUS);
     iowrite32(val_in, edu->map + EDU_FACTORIAL);
 
-    while (ioread32(edu->map + EDU_STATUS))
-        for (i = 0; i < skip; i++);
+    while (edu->fact_computing)
+    {
+        log_info("%s: factorial's computing status = %d", pci_name(edu->pdev), edu->fact_computing);
+        for (i = 0; i < skip; i++) {}           
+    }
 
+    log_info("%s: factorial's computing status = %d", pci_name(edu->pdev), edu->fact_computing);
     val_out = ioread32(edu->map + EDU_FACTORIAL);
 
     if (put_user(val_out, &cmd->val_out))
@@ -224,8 +234,14 @@ static irqreturn_t edu_irq(int irq, void *data)
         return IRQ_NONE;
 
     log_info("%s: got interrupted (%x)", pci_name(dev), status);
-    iowrite32(status, edu->map + EDU_INTR_ACK);
+    
+    edu->fact_computing &= ioread32(edu->map + EDU_STATUS) & EDU_STATUS_COPMUTING;
 
+    log_info("%s: interrupted with factorial's computing status = %d", 
+        pci_name(dev), edu->fact_computing);
+    
+    iowrite32(status, edu->map + EDU_INTR_ACK);
+    
     return IRQ_HANDLED;
 }
 
