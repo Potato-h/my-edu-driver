@@ -6,6 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/cdev.h>
+#include <linux/processor.h>
 
 #include <edu.h>
 
@@ -79,7 +80,7 @@ static long edu_do_xor(struct edu_device *edu, unsigned long arg)
 static long edu_do_factorial(struct edu_device *edu, unsigned long arg)
 {
     struct edu_factorial_cmd __user *cmd = (void __user *)(arg);
-    u32 val_in, val_out, i, skip = (u32)(1e9);
+    u32 val_in, val_out; 
     edu->fact_computing = 1;
     
     if (get_user(val_in, &cmd->val_in))
@@ -88,11 +89,7 @@ static long edu_do_factorial(struct edu_device *edu, unsigned long arg)
     iowrite32(EDU_STATUS_RAISE_INTR, edu->map + EDU_STATUS);
     iowrite32(val_in, edu->map + EDU_FACTORIAL);
 
-    while (edu->fact_computing)
-    {
-        log_info("%s: factorial's computing status = %d", pci_name(edu->pdev), edu->fact_computing);
-        for (i = 0; i < skip; i++) {}           
-    }
+    spin_until_cond(!edu->fact_computing);
 
     log_info("%s: factorial's computing status = %d", pci_name(edu->pdev), edu->fact_computing);
     val_out = ioread32(edu->map + EDU_FACTORIAL);
