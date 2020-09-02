@@ -6,7 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/cdev.h>
-#include <linux/processor.h>
+#include <linux/wait.h>
 
 #include <edu.h>
 
@@ -55,6 +55,7 @@ struct edu_device
     struct device *dev;
 
     unsigned int fact_computing : 1;
+    wait_queue_head_t wait_queue;
 };
 
 static struct class *edu_class;
@@ -89,8 +90,8 @@ static long edu_do_factorial(struct edu_device *edu, unsigned long arg)
     iowrite32(EDU_STATUS_RAISE_INTR, edu->map + EDU_STATUS);
     iowrite32(val_in, edu->map + EDU_FACTORIAL);
 
-    spin_until_cond(!edu->fact_computing);
-
+    wait_event_interruptible(edu->wait_queue, !edu->fact_computing);
+    
     log_info("%s: factorial's computing status = %d", pci_name(edu->pdev), edu->fact_computing);
     val_out = ioread32(edu->map + EDU_FACTORIAL);
 
@@ -236,7 +237,9 @@ static irqreturn_t edu_irq(int irq, void *data)
     log_info("%s: got interrupted (%x)", pci_name(dev), status);
     
     edu->fact_computing &= ioread32(edu->map + EDU_STATUS) & EDU_STATUS_COPMUTING;
-
+    if (!edu->fact_computing)
+        wake_up_interruptible(&edu->wait_queue);
+    
     log_info("%s: interrupted with factorial's computing status = %d", 
         pci_name(dev), edu->fact_computing);
     
@@ -336,6 +339,8 @@ static int edu_probe(struct pci_dev *dev, const struct pci_device_id *id)
     rc = edu_create_chardev(edu);
     if (rc)
         goto err_free_irq;
+
+    init_waitqueue_head(&edu->wait_queue);
 
     return 0;
 
