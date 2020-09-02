@@ -123,7 +123,10 @@ static long edu_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         return edu_do_xor(edu, arg);
 
     case EDU_IOCTL_FACTORIAL:
-        return edu_do_factorial(edu, arg);
+        if (ioread32(edu->map + EDU_STATUS) & EDU_STATUS_COPMUTING)
+            return -EBUSY;
+        else
+            return edu_do_factorial(edu, arg);
 
     case EDU_IOCTL_INTR:
         return edu_do_intr(edu, arg);
