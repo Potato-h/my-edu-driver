@@ -409,6 +409,7 @@ static void __exit edu_exit(void)
 module_init(edu_init);
 module_exit(edu_exit);
 
+MODULE_AUTHOR("Ilya Repko <Ilya.Repko@oktetlabs.ru>");
 MODULE_AUTHOR("Ilya Shpilkov <ilya.shpilkov@mail.ru>");
 MODULE_DESCRIPTION("QEMU's 'edu' device driver");
 MODULE_LICENSE("GPL");
